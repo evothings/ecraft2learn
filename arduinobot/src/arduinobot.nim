@@ -12,20 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import jester, mqtt, asyncdispatch, asyncnet, htmlgen, json, logging, os, strutils, sequtils, parseopt2, nuuid
+import jester, mqtt, MQTTClient, asyncdispatch, asyncnet, htmlgen,
+  json, logging, os, strutils, sequtils, parseopt2, nuuid
 
-# A service written in Nim.
-# http://localhost:10000/hello
+# A service written in Nim, run as:
+#
+#   arduinobot -u:myuser -p:mysecretpassword tcp://some-mqtt-server.com:1883
+#
+# It will connect and pick up configuration from the config topic.
+# Default is then to listen on port 10000 for REST calls:
+#
+#   https://localhost:10000/hello
 
+# Jester settings
 settings:
   port = Port(10000)
 
-const path = "public/download" 
-
-var serverUrl = "tcp://lora.evothings.com:1883"
-var clientID = "arduinobot-" + generateUUID()
-
-var client = newClient(serverUrl, clientID, MQTTPersistenceType.None)
+# MQTT defaults
+var serverUrl = "tcp://mqtt.evothings.com:1883"
+var clientID = "arduinobot-" & generateUUID()
+var username = "test"
+var password = "test"
+var client: MQTTClient
 
 # MQTT Callbacks
 proc connectionLost(cause: string) =
@@ -44,14 +52,14 @@ proc disconnect() =
 
 proc connect() =
   try:
+    echo "Connecting as " & clientID & " to " & serverUrl
+    client = newClient(serverUrl, clientID, MQTTPersistenceType.None)
     var connectOptions = newConnectOptions()
-    connectOptions.username = "admin"
-    connectOptions.password = "lots"
-
+    connectOptions.username = username
+    connectOptions.password = password
     client.setCallbacks(connectionLost, messageArrived, deliveryComplete)
     client.connect(connectOptions)
     client.subscribe("config", QOS0)
-
   except MQTTError:
     quit "MQTT exception: " & getCurrentExceptionMsg()
 
@@ -62,24 +70,15 @@ proc parseArguments() =
       serverUrl = key
     of cmdLongOption, cmdShortOption:
       case key:
-      of "p", "port":
-        result.port = parseInt(value)
-      of "path-prefix":
-        result.pathPrefix = value
-      of "heartbeat":
-        result.heartbeat = parseInt(value)
-      of "dashboard":
-        result.dashboard = parseInt(value)
-      of "d", "debug":
-        result.debug = true
+      of "u", "username":
+        username = value
+      of "p", "password":
+        password = value
       of "h", "help":
-        echo USAGE
-        quit QuitSuccess
-      of "v", "version":
-        echo VERSION
+        echo "here is some help"
         quit QuitSuccess
       else:
-        echo "Nope"
+        echo "no such option"
         quit QuitFailure
     of cmdEnd:
       assert(false) # cannot happen
