@@ -25,6 +25,8 @@ Arduinobot is developed primarily for Raspbian. The latest stable is called **St
     unzip 2017-09-07-raspbian-stretch-lite.zip
     sudo dd bs=4M if=2017-09-07-raspbian-stretch-lite.img of=/dev/mmcblk0
 
+In the end we will make **an automated script to build a complete sdcard** with Arduinobot, but for now this document describes the various steps to prepping it.
+
 ## Make sure it was written
 
     sudo dd bs=4M if=/dev/mmcblk0 of=from-sd-card.img
@@ -46,26 +48,54 @@ And configure it:
 
     sudo raspi-config
 
-* Expand filesystem (Advanced)
-* Change hostname
+* Expand filesystem (Advanced Options)
+* Change hostname (if you wish)
 * Enable SSH (under Interfacing options)
+* Change timezone
+
+Then reboot it and run:
+
+    sudo apt-get update
+    sudo apt-get upgrade
+
 
 # MQTT
-Arduinobot can use any MQTT server, but an interesting use case is when the Raspberry Pi is a complete standalone solution, acting as an access point, and not connecting to any other network. In this case we run a local MQTT server on the Raspberry and for the moment we have chosen to use [Mosquitto](https://mosquitto.org/).
+Arduinobot can use any MQTT server, but an interesting use case is when the Raspberry Pi is a complete standalone solution, acting as an access point, and not connecting to any other network. In this case we run a local MQTT server on the Raspberry and for the moment we have chosen to use [Mosquitto](https://mosquitto.org/) and to get the latest we use their own repositories:
 
-## Installing Mosquitto
-...
+    wget http://repo.mosquitto.org/debian/mosquitto-repo.gpg.key
+    sudo apt-key add mosquitto-repo.gpg.key
+
+Then make the repository available to apt:
+
+    cd /etc/apt/sources.list.d/
+    sudo wget http://repo.mosquitto.org/debian/mosquitto-stretch.list
+ 
+Then update apt and install:
+
+    sudo apt-get update
+    sudo aptitude install mosquitto "Select n at beginning and it should offer version 1.4.10"
+
 
 # Arduino IDE
 Arduinobot calls out to the binaries included in the Arduino IDE installation to perform it's work. Installing Arduino is easily done by simply downloading and unpacking:
 
-    wget https://www.arduino.cc/download_handler.php?f=/arduino-1.8.4-linuxarm.tar.xz
+    wget https://www.arduino.cc/download.php?f=/arduino-1.8.4-linuxarm.tar.xz
+    mv *arduino*xz arduino-1.8.4-linuxarm.tar.xz
     tar xf arduino-1.8.4-linuxarm.tar.xz
 
-# Arduino bot
+# Arduinobot
+Install git and other tools:
 
+    sudo apt-get install git
 
-https://github.com/arduino/Arduino/blob/master/build/shared/manpage.adoc
+If you wish to clone using git, start SSH agent and add key:
+
+    eval "$(ssh-agent -s)"
+    ssh-add ~/.ssh/id_rsa
+
+...or whichever key you need to add. Then clone out:
+
+    git clone git@github.com:evothings/ecraft2learn.git
 
 
 ## Installing Nim
@@ -119,6 +149,9 @@ If successful it should look something like the following:
 
 
 ## How to work on the code
+
+* https://github.com/arduino/Arduino/blob/master/build/shared/manpage.adoc
+* https://github.com/arduino/arduino-builder
 
 I recommend installing [VSCode](https://code.visualstudio.com) and the [Nim extension](https://github.com/Microsoft/vscode-arduino) for it.
 
