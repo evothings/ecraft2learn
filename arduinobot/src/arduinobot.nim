@@ -51,7 +51,6 @@ let help = """
     -v --version     Show version.
   """  
 let args = docopt(help, version = "arduinobot 0.1.0")
-echo $args
 username = $args["-u"]
 password = $args["-p"]
 serverUrl = $args["-s"]
@@ -201,7 +200,7 @@ proc verify(job: Job):  tuple[output: TaintedString, exitCode: int] =
   let cmd = arduinoIde & " --verify --board " & arduinoBoard & " --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
   result = execCmdEx(cmd)
-  sleep(5000)
+  #sleep(5000)
   echo "Job done " & job.id
   return
 
@@ -212,7 +211,7 @@ proc upload(job: Job):  tuple[output: TaintedString, exitCode: int] =
   let cmd = arduinoIde & " --upload --preserve-temp-files --board " & arduinoBoard & " --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
   result = execCmdEx(cmd)
-  sleep(5000)
+  #sleep(5000)
   echo "Job done " & job.id
   return
 
@@ -232,7 +231,6 @@ proc perform(job: Job): JsonNode =
     result = %*{"type": "success", "output": output, "exitCode": exitCode}
   except:
     result = %*{"type": "error", "message": "Failed job"}
-  # First we publish it over MQTT
   publishMQTT("result/" & job.id, $result)
 
 proc startVerifyJob(spec: JsonNode): JsonNode =
@@ -290,10 +288,6 @@ routes:
     ## Get status of a given job
     let job = getJobStatus(@"id")
     resp($job, "application/json")
-
-
-# Parse out command line arguments
-#parseArguments()
 
 # Clean out working directory
 cleanWorkingDirectory()
