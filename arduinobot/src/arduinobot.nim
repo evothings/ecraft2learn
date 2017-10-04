@@ -50,7 +50,7 @@ let help = """
     -h --help        Show this screen.
     -v --version     Show version.
   """  
-let args = docopt(help, version = "arduinobot 1.0")
+let args = docopt(help, version = "arduinobot 0.1.0")
 echo $args
 username = $args["-u"]
 password = $args["-p"]
