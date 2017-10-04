@@ -183,6 +183,9 @@ proc createUploadJob(spec: JsonNode): Job =
 proc cleanWorkingDirectory() =
   let cwd = getCurrentDir()
   let builds = cwd / "builds"
+  echo "Cleaning out builds directory: " & $builds
+  removeDir(builds)
+  createDir(builds)
 
 proc unpack(job: Job) =
   ## Create a build directory and unpack sources into it.
