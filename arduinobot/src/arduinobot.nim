@@ -20,42 +20,41 @@
 import jester, asyncdispatch, mqtt, MQTTClient,
   asyncnet, htmlgen, json, logging, os, strutils,
   sequtils, parseopt2, nuuid, tables, osproc, base64,
-  threadpool
+  threadpool, docopt
 
 # Jester settings
 settings:
   port = Port(10000)
 
 # MQTT defaults
-var serverUrl = "tcp://localhost:1883"
 var clientID = "arduinobot-" & generateUUID()
-var username = "test"
-var password = "test"
+var username, password, serverUrl: string
 
 # Arduino defaults
 const
   arduinoIde = "~/arduino-1.8.3/arduino"
   arduinoBoard = "arduino:avr:uno"
 
-proc parseArguments() =
-  for kind, key, value in getopt():
-    case kind:
-    of cmdArgument:
-      serverUrl = key
-    of cmdLongOption, cmdShortOption:
-      case key:
-      of "u", "username":
-        username = value
-      of "p", "password":
-        password = value
-      of "h", "help":
-        echo "Start arduinobot like this: arduinobot -u:<username> -p:<password> tcp://somehost:port"
-        quit QuitSuccess
-      else:
-        echo "No such option"
-        quit QuitFailure
-    of cmdEnd:
-      assert(false) # cannot happen
+let help = """
+  arduinobot
+  
+  Usage:
+    arduinobot [-u USERNAME] [-p PASSWORD] [-s MQTTURL]
+    arduinobot (-h | --help)
+    arduinobot (-v | --version)
+  
+  Options:
+    -u USERNAME      Set MQTT username [default: test].
+    -p PASSWORD      Set MQTT password [default: test].
+    -s MQTTURL       Set URL for the MQTT server [default: tcp://localhost:1883]
+    -h --help        Show this screen.
+    -v --version     Show version.
+  """  
+let args = docopt(help, version = "arduinobot 1.0")
+echo $args
+username = $args["-u"]
+password = $args["-p"]
+serverUrl = $args["-s"]
 
 type
   MessageKind = enum connect, publish, stop
@@ -294,7 +293,7 @@ routes:
 
 
 # Parse out command line arguments
-parseArguments()
+#parseArguments()
 
 # Clean out working directory
 cleanWorkingDirectory()
