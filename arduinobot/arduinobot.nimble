@@ -6,6 +6,7 @@ license       = "MIT"
 srcDir        = "src"
 binDir        = "bin"
 bin           = @["arduinobot"]
+skipExt       = @["nim"]
 
 # Dependencies
 requires "nim >= 0.17.2"
@@ -14,3 +15,7 @@ requires "nuuid"
 requires "docopt >= 0.6.5"
 requires "tempdir >= 1.0.0"
 requires "https://github.com/barnybug/nim-mqtt.git"
+
+# Tasks
+task test, "Runs the test suite":
+  exec "nim c -r tests/all"
