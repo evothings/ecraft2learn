@@ -135,18 +135,40 @@ First we need to compile the Paho C library for communicating with MQTT:
     sudo ldconfig
 
 ### Building
-Enter the `arduinobot` directory and build `arduinobot` using `nimble install`:
+Enter the `arduinobot` directory and build `arduinobot` using `nimble build` and install it using `nimble install`:
 
     cd arduinobot
     nimble install
 
+You can also run tests, but they require a running MQTT server on localhost:
+
+    nimble tests
+
 ## How to run
-Arduinobot is a server and only needs an MQTT server to connect to in order to function:
+Arduinobot is a server and only needs an MQTT server to connect to in order to function. Run using `--help` to see how it works:
 
-    arduinobot -u:<username> -p:<password> tcp://<someserver>:1883
+    gokr@yoda:~$ arduinobot --help
+    arduinobot
+    
+    Usage:
+        arduinobot [-u USERNAME] [-p PASSWORD] [-s MQTTURL]
+        arduinobot (-h | --help)
+        arduinobot (-v | --version)
+    
+    Options:
+        -u USERNAME      Set MQTT username [default: test].
+        -p PASSWORD      Set MQTT password [default: test].
+        -s MQTTURL       Set URL for the MQTT server [default: tcp://localhost:1883]
+        -h --help        Show this screen.
+        -v --version     Show version.
 
-If successful it should look something like the following:
 
+If you run it successfully it should look something like this:
+
+    gokr@yoda:~$ arduinobot 
+    INFO Jester is making jokes at http://localhost:10000
+    Cleaning out builds directory: /home/gokr/evo/ecraft2learn/arduinobot/src/builds
+    Connecting as arduinobot-44bedc65-6e7b-4e33-b91e-dcba5fd4a6e0 to tcp://localhost:1883
 
 ## How to work on the code
 

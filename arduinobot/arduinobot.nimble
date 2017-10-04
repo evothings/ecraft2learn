@@ -18,4 +18,4 @@ requires "https://github.com/barnybug/nim-mqtt.git"
 
 # Tasks
 task test, "Runs the test suite":
-  exec "nim c -r tests/all"
+  exec "cd tests && nim c -r all"
