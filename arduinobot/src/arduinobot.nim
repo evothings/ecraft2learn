@@ -14,12 +14,12 @@
 #
 # verify/<response-id>             - Payload is JSON specification for a job.
 # upload/<response-id>             - Payload is JSON specification for a job.
-# response/<command>/<response-id> - Responses to requests are published here as JSON.
+# response/<command>/<response-id> - Responses to requests are published here as JSON, typically with job id.
 # result/<job-id>                  - Results from Jobs are published here as JSON.
 
 import jester, asyncdispatch, mqtt, MQTTClient,
   asyncnet, htmlgen, json, logging, os, strutils,
-  sequtils, parseopt2, nuuid, tables, osproc, base64,
+  sequtils, nuuid, tables, osproc, base64,
   threadpool, docopt
 
 # Jester settings
