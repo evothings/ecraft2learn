@@ -70,10 +70,10 @@ Then make the repository available to apt:
     cd /etc/apt/sources.list.d/
     sudo wget http://repo.mosquitto.org/debian/mosquitto-stretch.list
  
-Then update apt and install:
+Then update apt and install (Select "n" at beginning and it should offer version 1.4.10):
 
     sudo apt-get update
-    sudo aptitude install mosquitto "Select n at beginning and it should offer version 1.4.10"
+    sudo aptitude install mosquitto
 
 
 # Arduino IDE
@@ -99,7 +99,7 @@ If you wish to clone using git, start SSH agent and add key:
 
 
 ## Installing Nim
-Arduinobot is written in Nim, a modern high performance language that produces small and fast binaries. We first need to install Nim.
+Arduinobot is written in Nim, a modern high performance language that produces small and fast binaries by compiling via C. We first need to install Nim.
 
 ### Linux
 For regular Linux (not Raspbian, see below) you can install Nim the easiest using [choosenim](https://github.com/dom96/choosenim):
@@ -109,7 +109,7 @@ For regular Linux (not Raspbian, see below) you can install Nim the easiest usin
 That will install the `nim` compiler and the `nimble` package manager.
 
 ### Raspbian
-On Raspbian we need to install nim in a more manual fashion:
+On Raspbian we need to install and bootstrap nim in a more manual fashion:
 
     wget https://nim-lang.org/download/nim-0.17.2.tar.xz
     tar xf nim-0.17.2.tar.xz 
@@ -122,11 +122,17 @@ Finally we add this to ~/.profile
 
     export PATH=$PATH:~/nim-0.17.2/bin:~/.nimble/bin
 
-Then we have the `nim` compiler and the `nimble` package manager.
+Then we have the `nim` compiler and the `nimble` package manager available.
 
 ## Building Arduinobot
 ### Prerequisites
-First we need to compile the Paho C library for communicating with MQTT:
+First we need to compile the [Paho C library](https://www.eclipse.org/paho/clients/c/) for communicating with MQTT. It's not available as far as I could tell via packages. This library is the de facto standard for MQTT communication and used in tons of projects.
+
+To compile we also need libssl-dev:
+
+    sudo apt-get install libssl-dev
+
+Then we can build and install Paho C:
 
     git clone https://github.com/eclipse/paho.mqtt.c.git
     cd paho.mqtt.c
@@ -135,17 +141,17 @@ First we need to compile the Paho C library for communicating with MQTT:
     sudo ldconfig
 
 ### Building
-Enter the `arduinobot` directory and build `arduinobot` using `nimble build` and install it using `nimble install`:
+Now we are ready to build **arduinobot**. Enter the `arduinobot` directory and build it using the command `nimble build` or both build and install it using `nimble install`. This will download and install Nim dependencies automatically:
 
     cd arduinobot
     nimble install
 
-You can also run tests, but they require a running MQTT server on localhost:
+You can also run some tests, but they require a running MQTT server on localhost:
 
     nimble tests
 
 ## How to run
-Arduinobot is a server and only needs an MQTT server to connect to in order to function. Run using `--help` to see how it works:
+Arduinobot is a server and only needs an MQTT server to connect to in order to function. Use `--help` to see information on available options:
 
     gokr@yoda:~$ arduinobot --help
     arduinobot
@@ -162,8 +168,9 @@ Arduinobot is a server and only needs an MQTT server to connect to in order to f
         -h --help        Show this screen.
         -v --version     Show version.
 
+In fact, with a running **mosquitto** locally using default configuration you should be able to run arduinobot without any arguments. It will then use default values for username, password and MQTT server.
 
-If you run it successfully it should look something like this:
+If it works it should look something like this:
 
     gokr@yoda:~$ arduinobot 
     INFO Jester is making jokes at http://localhost:10000
