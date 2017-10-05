@@ -34,6 +34,7 @@ var username, password, serverUrl: string
 const
   arduinoIde = "~/arduino-1.8.4/arduino"
   arduinoBoard = "arduino:avr:uno"
+  arduinoPort = "/dev/ttyACM0"
 
 let help = """
   arduinobot
@@ -208,7 +209,7 @@ proc upload(job: Job):  tuple[output: TaintedString, exitCode: int] =
   ## Run --upload command via Arduino IDE
   echo "Starting upload job " & job.id
   # --port portname --verbose-build / --verbose-upload / --verbose
-  let cmd = arduinoIde & " --upload --preserve-temp-files --board " & arduinoBoard & " --pref build.path=" & job.path & " " & job.sketchPath
+  let cmd = arduinoIde & " --upload --port " & arduinoPort & " --preserve-temp-files --board " & arduinoBoard & " --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
   result = execCmdEx(cmd)
   #sleep(5000)
