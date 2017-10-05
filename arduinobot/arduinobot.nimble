@@ -5,7 +5,7 @@ description   = "Headless REST/MQTT service for compiling and flashing Arduino s
 license       = "MIT"
 srcDir        = "src"
 binDir        = "bin"
-bin           = @["arduinobot"]
+bin           = @["arduinobot", "arduinobotup"]
 skipExt       = @["nim"]
 
 # Dependencies
