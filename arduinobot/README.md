@@ -177,6 +177,15 @@ If it works it should look something like this:
     Cleaning out builds directory: /home/gokr/evo/ecraft2learn/arduinobot/src/builds
     Connecting as arduinobot-44bedc65-6e7b-4e33-b91e-dcba5fd4a6e0 to tcp://localhost:1883
 
+Now you can test it out by using the included `arduinobotup` tool that can trivially submit a job to arduinobot. You can find `blinky.ino` in the tests directory so try it out with:
+
+    arduinobotup --verify tests/blinky.ino
+
+Or from another machine it should work using this:
+
+    arduinobotup --server tcp://raspberrypi.local:1883 --verify tests/blinky.ino
+
+
 ## How to work on the code
 
 * https://github.com/arduino/Arduino/blob/master/build/shared/manpage.adoc
