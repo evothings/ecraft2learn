@@ -32,7 +32,7 @@ var username, password, serverUrl: string
 
 # Arduino defaults
 const
-  arduinoIde = "~/arduino-1.8.3/arduino"
+  arduinoIde = "~/arduino-1.8.4/arduino"
   arduinoBoard = "arduino:avr:uno"
 
 let help = """
