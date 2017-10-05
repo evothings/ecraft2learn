@@ -1,7 +1,10 @@
 builds
+bin
 junk
 nimcache
 arduinobot
+arduinobotup
+tests/all
 *.zip
 *.img
 NOTES.md
