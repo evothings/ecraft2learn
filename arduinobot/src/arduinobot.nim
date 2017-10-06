@@ -36,6 +36,8 @@ const
   arduinoBoard = "arduino:avr:uno"
   arduinoPort = "/dev/ttyACM0"
 
+template buildsDirectory: string = getCurrentDir() / "builds"
+
 let help = """
   arduinobot
   
@@ -166,31 +168,32 @@ type
     case kind: JobKind
     of jkVerify, jkUpload:
       id: string         # UUID on creation of job
+      board: string      # The board type string, like "arduino:avr:uno" or "arduino:avr:nano:cpu=atmega168"
+      port: string       # The port to use, like "/dev/ttyACM0"
       path: string       # Full path to tempdir where source is unpacked
-      sketchPath: string # Full path sketch file like: /.../blabla/foo/foo.ino
+      sketchPath: string # Full path to sketch file like: /.../blabla/foo/foo.ino
       sketch: string     # name of sketch file only, like: foo.ino
       src: string        # base64 source of sketch, for multiple files, what do we do?
 
 proc createVerifyJob(spec: JsonNode): Job =
   ## Create a new job with a UUID and put it into the table
-  Job(kind: jkVerify, sketch: spec["sketch"].getStr , src: spec["src"].getStr, id: generateUUID())  
+  Job(kind: jkVerify, board: arduinoBoard, port: arduinoPort, sketch: spec["sketch"].getStr,
+    src: spec["src"].getStr, id: generateUUID())  
 
 proc createUploadJob(spec: JsonNode): Job =
   ## Create a new job with a UUID and put it into the table
-  Job(kind: jkUpload, sketch: spec["sketch"].getStr , src: spec["src"].getStr, id: generateUUID())  
+  Job(kind: jkUpload, board: arduinoBoard, port: arduinoPort, sketch: spec["sketch"].getStr,
+    src: spec["src"].getStr, id: generateUUID())  
 
 proc cleanWorkingDirectory() =
-  let cwd = getCurrentDir()
-  let builds = cwd / "builds"
-  echo "Cleaning out builds directory: " & $builds
-  removeDir(builds)
-  createDir(builds)
+  echo "Cleaning out builds directory: " & buildsDirectory
+  removeDir(buildsDirectory)
+  createDir(buildsDirectory)
 
 proc unpack(job: Job) =
-  ## Create a build directory and unpack sources into it.
-  let cwd = getCurrentDir()
-  job.path = cwd / "builds" / $job.id
-  var (_, name, _) = splitFile(job.sketch)
+  ## Create a job directory and unpack sources into it.
+  job.path = buildsDirectory / $job.id
+  var name = extractFilename(job.sketch)
   job.sketchPath = job.path / name / job.sketch
   createDir(job.path / name)
   writeFile(job.sketchPath, decode(job.src))
@@ -198,21 +201,21 @@ proc unpack(job: Job) =
 proc verify(job: Job):  tuple[output: TaintedString, exitCode: int] =
   ## Run --verify command via Arduino IDE
   echo "Starting verify job " & job.id
-  let cmd = arduinoIde & " --verify --board " & arduinoBoard & " --pref build.path=" & job.path & " " & job.sketchPath
+  let cmd = arduinoIde & " --verbose --verify --board " & job.board &
+    " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
   result = execCmdEx(cmd)
-  #sleep(5000)
   echo "Job done " & job.id
   return
 
 proc upload(job: Job):  tuple[output: TaintedString, exitCode: int] =
   ## Run --upload command via Arduino IDE
   echo "Starting upload job " & job.id
-  # --port portname --verbose-build / --verbose-upload / --verbose
-  let cmd = arduinoIde & " --upload --port " & arduinoPort & " --preserve-temp-files --board " & arduinoBoard & " --pref build.path=" & job.path & " " & job.sketchPath
+  # --verbose-build / --verbose-upload / --verbose
+  let cmd = arduinoIde & " --verbose --upload --board " & job.board & " --port " & job.port &
+    " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
   result = execCmdEx(cmd)
-  #sleep(5000)
   echo "Job done " & job.id
   return
 
