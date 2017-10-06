@@ -19,28 +19,17 @@ The Arduinobot is a small binary service that is run as a service on a Raspberry
 The actual work is performed by invoking either `arduino` or `arduino-builder`.
 
 # Raspbian Stretch
-Arduinobot is developed primarily for Raspbian. The latest stable is called **Stretch**, on Linux, flash the sdcard like this:
-
-    wget http://downloads.raspberrypi.org/raspbian/images/raspbian-2017-09-08/2017-09-07-raspbian-stretch.zip
-    unzip 2017-09-07-raspbian-stretch-lite.zip
-    sudo dd bs=4M if=2017-09-07-raspbian-stretch-lite.img of=/dev/mmcblk0
+Arduinobot is developed primarily for Raspbian. The latest stable is called **Stretch**, on Linux, [follow the instructions to put it on an sdcard](https://www.raspberrypi.org/documentation/installation/installing-images/linux.md).
 
 In the end we will make **an automated script to build a complete sdcard** with Arduinobot, but for now this document describes the various steps to prepping it.
 
-## Make sure it was written
-
-    sudo dd bs=4M if=/dev/mmcblk0 of=from-sd-card.img
-    sudo truncate --reference 2017-09-07-raspbian-stretch-lite.img from-sd-card.img
-    diff -s from-sd-card.img 2017-09-07-raspbian-stretch-lite.img
-    rm from-sd-card.img
-
 ## Boot Rpi
-Put a file called "ssh" onto the sdcard. Insert into Rpi, connect ethernet wire, connect micro USB for power.
+Put a file called "ssh" onto the "boot" partition of the sdcard.
 
-    touch /media/<blabla>/ssh
+    touch /media/<myuser>/boot/ssh
     sudo umount /media/<blabla>
 
-Then when it boots you should be able to login:
+Insert into Rpi, connect ethernet wire, connect micro USB for power. Then when it boots you should be able to login:
 
     ssh pi@raspberrypi.local "raspberry"
 
@@ -70,15 +59,19 @@ Then make the repository available to apt:
     cd /etc/apt/sources.list.d/
     sudo wget http://repo.mosquitto.org/debian/mosquitto-stretch.list
  
-Then update apt and install (Select "n" at beginning and it should offer version 1.4.10):
+Then update apt and install mosquitto - select "n" when it first explains the problem, then answer "Y" to the following proposal to use version **1.4.10** instead.:
 
     sudo apt-get update
     sudo aptitude install mosquitto
 
+Then run this to see that mosquitto is listening on port 1883:
+
+    netstat -plnt | grep 1883
 
 # Arduino IDE
 Arduinobot calls out to the binaries included in the Arduino IDE installation to perform it's work. Installing Arduino is easily done by simply downloading and unpacking:
 
+    cd
     wget https://www.arduino.cc/download.php?f=/arduino-1.8.4-linuxarm.tar.xz
     mv *arduino*xz arduino-1.8.4-linuxarm.tar.xz
     tar xf arduino-1.8.4-linuxarm.tar.xz
@@ -88,21 +81,25 @@ Install git and other tools:
 
     sudo apt-get install git
 
-If you wish to clone using git, start SSH agent and add key:
+If you wish to clone using git protocol, copy your keys to the Raspberry (using scp for example), then start the SSH agent and add key:
 
     eval "$(ssh-agent -s)"
     ssh-add ~/.ssh/id_rsa
 
-...or whichever key you need to add. Then clone out:
+...or whichever key you need to add. Then you should be able to clone out:
 
     git clone git@github.com:evothings/ecraft2learn.git
+
+Otherwise, just use `http` instead:
+
+    git clone https://github.com/evothings/ecraft2learn.git
 
 
 ## Installing Nim
 Arduinobot is written in Nim, a modern high performance language that produces small and fast binaries by compiling via C. We first need to install Nim.
 
 ### Linux
-For regular Linux (not Raspbian, see below) you can install Nim the easiest using [choosenim](https://github.com/dom96/choosenim):
+For **regular Linux** (not Raspbian, see below!) you can install Nim the easiest using [choosenim](https://github.com/dom96/choosenim):
 
     curl https://nim-lang.org/choosenim/init.sh -sSf | sh
 
@@ -143,8 +140,16 @@ Then we can build and install Paho C:
 ### Building
 Now we are ready to build **arduinobot**. Enter the `arduinobot` directory and build it using the command `nimble build` or both build and install it using `nimble install`. This will download and install Nim dependencies automatically:
 
-    cd arduinobot
+    cd ~/ecraft2learn/arduinobot
     nimble install
+
+It should eventually end with:
+
+    ...
+    Installing arduinobot@0.1.0
+    Building arduinobot/arduinobot using c backend
+    Building arduinobot/arduinobotup using c backend
+    Success: arduinobot installed successfully.
 
 You can also run some tests, but they require a running MQTT server on localhost:
 
