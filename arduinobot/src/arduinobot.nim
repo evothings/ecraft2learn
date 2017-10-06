@@ -1,13 +1,13 @@
 # Arduinobot is a service written in Nim, run as:
 #
-#   arduinobot -u:myuser -p:mysecretpassword tcp://some-mqtt-server.com:1883
+#   arduinobot -u myuser -p mysecretpassword -s tcp://some-mqtt-server.com:1883
 #
 # It will connect and pick up rest of configuration from the config topic.
 # Default is then to listen on port 10000 for REST calls with JSON payloads
 # and to listen to corresponding MQTT topics.
 #
 # * Jester runs in the main thread, asynchronously. 
-# * MQTT is handled in the messengerThread and uses a Channel to publish.
+# * MQTT is handled in the messengerThread and uses one Channel to publish, and another to get messages.
 # * Jobs are spawned on the threadpool and results are published on MQTT via the messenger Channel.
 #
 # Topics used:
@@ -16,19 +16,16 @@
 # upload/<response-id>             - Payload is JSON specification for a job.
 # response/<command>/<response-id> - Responses to requests are published here as JSON, typically with job id.
 # result/<job-id>                  - Results from Jobs are published here as JSON.
+#
+# Jobs are built today using Arduino via command line, as described here:
+#   https://github.com/arduino/Arduino/blob/master/build/shared/manpage.adoc
 
-import jester, asyncdispatch, mqtt, MQTTClient,
-  asyncnet, htmlgen, json, logging, os, strutils,
-  sequtils, nuuid, tables, osproc, base64,
-  threadpool, docopt
+import jester, asyncdispatch, mqtt, MQTTClient, asyncnet, htmlgen, json, logging, os, strutils,
+  sequtils, nuuid, tables, osproc, base64, threadpool, docopt
 
 # Jester settings
 settings:
   port = Port(10000)
-
-# MQTT defaults
-var clientID = "arduinobot-" & generateUUID()
-var username, password, serverUrl: string
 
 # Arduino defaults
 const
@@ -54,9 +51,12 @@ let help = """
     -v --version     Show version.
   """  
 let args = docopt(help, version = "arduinobot 0.1.0")
-username = $args["-u"]
-password = $args["-p"]
-serverUrl = $args["-s"]
+
+# MQTT parameters
+let clientID = "arduinobot-" & generateUUID()
+let username = $args["-u"]
+let password = $args["-p"]
+let serverUrl = $args["-s"]
 
 type
   MessageKind = enum connect, publish, stop
@@ -127,8 +127,8 @@ proc handleMessage(topic: string, message: MQTTMessage) =
       handleVerify(parts[1], message.payload)
     of "upload":
       handleUpload(parts[1], message.payload)
-  else:
-    stderr.writeLine "Unknown topic: " & topic
+    else:
+      stderr.writeLine "Unknown topic: " & topic
 
 proc messengerLoop() {.thread.} =
   var client: MQTTClient
@@ -288,8 +288,8 @@ routes:
     let job = startUploadJob(spec)
     resp($job, "application/json")
 
-  get "/status/@id":
-    ## Get status of a given job
+  get "/result/@id":
+    ## Get result of a given job
     let job = getJobStatus(@"id")
     resp($job, "application/json")
 
