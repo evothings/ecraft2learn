@@ -198,16 +198,17 @@ type
       sketchPath: string # Full path to sketch file like: /.../blabla/foo/foo.ino
       sketch: string     # name of sketch file only, like: foo.ino
       src: string        # base64 source of sketch, for multiple files, what do we do?
+      arduinoIde: string # Full path to Arduino IDE executable
 
 proc createVerifyJob(spec: JsonNode): Job =
   ## Create a new job with a UUID and put it into the table
   Job(kind: jkVerify, board: arduinoBoard, port: arduinoPort, sketch: spec["sketch"].getStr,
-    src: spec["src"].getStr, id: generateUUID())  
+    src: spec["src"].getStr, id: generateUUID(), arduinoIde: arduinoIde)  
 
 proc createUploadJob(spec: JsonNode): Job =
   ## Create a new job with a UUID and put it into the table
   Job(kind: jkUpload, board: arduinoBoard, port: arduinoPort, sketch: spec["sketch"].getStr,
-    src: spec["src"].getStr, id: generateUUID())  
+    src: spec["src"].getStr, id: generateUUID(), arduinoIde: arduinoIde)
 
 proc cleanWorkingDirectory() =
   echo "Cleaning out builds directory: " & buildsDirectory
@@ -225,9 +226,8 @@ proc unpack(job: Job) =
 proc verify(job: Job):  tuple[output: TaintedString, exitCode: int] =
   ## Run --verify command via Arduino IDE
   echo "Starting verify job " & job.id
-  let cmd = arduinoIde & " --verbose --verify --board " & job.board &
-    " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath & "\""
-  #let cmd = "sleep 3"
+  let cmd = job.arduinoIde & " --verbose --verify --board " & job.board &
+    " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
   result = execCmdEx(cmd)
   echo "Job done " & job.id
@@ -236,7 +236,7 @@ proc upload(job: Job):  tuple[output: TaintedString, exitCode: int] =
   ## Run --upload command via Arduino IDE
   echo "Starting upload job " & job.id
   # --verbose-build / --verbose-upload / --verbose
-  let cmd = arduinoIde & " --verbose --upload --board " & job.board & " --port " & job.port &
+  let cmd = job.arduinoIde & " --verbose --upload --board " & job.board & " --port " & job.port &
     " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
   result = execCmdEx(cmd)
