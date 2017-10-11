@@ -2,9 +2,8 @@
 #
 #   arduinobot -u myuser -p mysecretpassword -s tcp://some-mqtt-server.com:1883
 #
-# It will connect and pick up rest of configuration from the config topic.
-# Default is then to listen on port 10000 for REST calls with JSON payloads
-# and to listen to corresponding MQTT topics.
+# Arduinobot listens on port 10000 for REST calls with JSON payloads
+# and on corresponding MQTT topics listed below.
 #
 # * Jester runs in the main thread, asynchronously. 
 # * MQTT is handled in the messengerThread and uses one Channel to publish, and another to get messages.
@@ -27,11 +26,13 @@ import jester, asyncdispatch, mqtt, MQTTClient, asyncnet, htmlgen, json, logging
 settings:
   port = Port(10000)
 
-# Arduino defaults
+# Various defaults
 const
-  arduinoIde = "~/arduino-1.8.4/arduino"
+  # TODO Obviously should not be const
   arduinoBoard = "arduino:avr:uno"
   arduinoPort = "/dev/ttyACM0"
+  arduinoResultFile = "arduinobot-result.json"
+  arduinobotVersion = "arduinobot 0.1.0"
 
 template buildsDirectory: string = getCurrentDir() / "builds"
 
@@ -39,18 +40,31 @@ let help = """
   arduinobot
   
   Usage:
-    arduinobot [-u USERNAME] [-p PASSWORD] [-s MQTTURL]
+    arduinobot [-c CONFIGFILE] [-a PATH] [-u USERNAME] [-p PASSWORD] [-s MQTTURL]
     arduinobot (-h | --help)
     arduinobot (-v | --version)
-  
+
   Options:
-    -u USERNAME      Set MQTT username [default: test].
-    -p PASSWORD      Set MQTT password [default: test].
-    -s MQTTURL       Set URL for the MQTT server [default: tcp://localhost:1883]
-    -h --help        Show this screen.
-    -v --version     Show version.
-  """  
-let args = docopt(help, version = "arduinobot 0.1.0")
+    -u USERNAME       Set MQTT username [default: test].
+    -p PASSWORD       Set MQTT password [default: test].
+    -s MQTTURL        Set URL for the MQTT server [default: tcp://localhost:1883]
+    -a PATH           Set full path to Arduino IDE executable [default: ~/arduino-1.8.4/arduino]
+    -c CONFIGFILE     Load options from given filename if it exists [default: arduinobot.conf]
+    -h --help         Show this screen.
+    -v --version      Show version.
+  """
+
+var args = docopt(help, version = arduinobotVersion)
+
+# We allow up to 10 jobs in parallell
+setMinPoolSize(10)
+
+# We need to load config file if it exists and run docopt again
+let config = $args["-c"]
+if existsFile(getCurrentDir() / config):
+  var conf = readFile(getCurrentDir() / config).splitWhitespace()
+  var params = commandLineParams().concat(conf)
+  args = docopt(help, params, version = arduinobotVersion)
 
 # MQTT parameters
 let clientID = "arduinobot-" & generateUUID()
@@ -58,12 +72,17 @@ let username = $args["-u"]
 let password = $args["-p"]
 let serverUrl = $args["-s"]
 
+# Local thread config variable
+var arduinoIde {.threadvar.}: string
+
 type
-  MessageKind = enum connect, publish, stop
+  MessageKind = enum connect, configure, publish, stop
   Message = object
     case kind: MessageKind
     of connect:
       serverUrl, clientID, username, password: string
+    of configure:
+      arduinoIde: string
     of publish:
       topic, payload: string
     of stop:
@@ -78,7 +97,10 @@ proc publishMQTT*(topic, payload: string) =
 
 proc connectMQTT*(s, c, u, p: string) =
   channel.send(Message(kind: connect, serverUrl: s, clientID: c, username: u, password: p))
-  
+
+proc configureMessenger*(arduinoIde: string) =
+  channel.send(Message(kind: configure, arduinoIde: arduinoIde))
+    
 proc stopMessenger() {.noconv.} =
   channel.send(Message(kind: stop))
   joinThread(messengerThread)
@@ -95,7 +117,6 @@ proc connectToServer(serverUrl, clientID, username, password: string): MQTTClien
     result.subscribe("config", QOS0)
     result.subscribe("verify/+", QOS0)
     result.subscribe("upload/+", QOS0)
-    result.subscribe("status/+", QOS0)
   except MQTTError:
     quit "MQTT exception: " & getCurrentExceptionMsg()
 
@@ -109,7 +130,7 @@ proc handleVerify(responseId, payload: string) =
   except:
     stderr.writeLine "Unable to parse JSON body: " & payload
     
-proc startUploadJob(spec: JsonNode): JsonNode {.gcsafe.}    
+proc startUploadJob(spec: JsonNode): JsonNode {.gcsafe.}
 proc handleUpload(responseId, payload: string) =
   var spec: JsonNode
   try:
@@ -139,7 +160,7 @@ proc messengerLoop() {.thread.} =
       # Wait upto 100 ms to receive an MQTT message
       let timeout = client.receive(topicName, message, 100)
       if not timeout:
-        echo "Topic: " & topicName & " payload: " & message.payload
+        #echo "Topic: " & topicName & " payload: " & message.payload
         handleMessage(topicName, message)
     # If we have something in the channel, handle it
     var (gotit, msg) = tryRecv(channel)
@@ -147,8 +168,10 @@ proc messengerLoop() {.thread.} =
       case msg.kind
       of connect:
         client = connectToServer(msg.serverUrl, msg.clientID, msg.username, msg.password)
+      of configure:
+        arduinoIde = msg.arduinoIde
       of publish:
-        echo "Publishing " & msg.topic & " " & msg.payload
+        #echo "Publishing " & msg.topic & " " & msg.payload
         discard client.publish(msg.topic, msg.payload, QOS0, false)
       of stop:
         client.disconnect(1000)
@@ -160,6 +183,7 @@ proc startMessenger(serverUrl, clientID, username, password: string) =
   messengerThread.createThread(messengerLoop)
   addQuitProc(stopMessenger)
   connectMQTT(serverUrl, clientID, username, password)
+  configureMessenger(arduinoIde)
 
 # A single object variant works fine since it's not complex
 type
@@ -202,11 +226,11 @@ proc verify(job: Job):  tuple[output: TaintedString, exitCode: int] =
   ## Run --verify command via Arduino IDE
   echo "Starting verify job " & job.id
   let cmd = arduinoIde & " --verbose --verify --board " & job.board &
-    " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath
+    " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath & "\""
+  #let cmd = "sleep 3"
   echo "Command " & cmd
   result = execCmdEx(cmd)
   echo "Job done " & job.id
-  return
 
 proc upload(job: Job):  tuple[output: TaintedString, exitCode: int] =
   ## Run --upload command via Arduino IDE
@@ -228,34 +252,55 @@ proc run(job: Job): tuple[output: TaintedString, exitCode: int] =
   of jkUpload:
     return job.upload()
 
-proc perform(job: Job): JsonNode =
+proc perform(job: Job) =
   ## Perform a job and publish JSON result
+  var res: JsonNode
   try:
     var (output, exitCode) = job.run()
-    result = %*{"type": "success", "output": output, "exitCode": exitCode}
+    res = %*{"type": "success", "output": output, "exitCode": exitCode}
   except:
-    result = %*{"type": "error", "message": "Failed job"}
-  publishMQTT("result/" & job.id, $result)
+    res = %*{"type": "error", "message": "Failed job: " & getCurrentExceptionMsg()}
+  writeFile(job.path / arduinoResultFile, $res)
+  publishMQTT("result/" & job.id, $res)
 
 proc startVerifyJob(spec: JsonNode): JsonNode =
   var job = createVerifyJob(spec)
-  discard spawn perform(job)
+  spawn perform(job)
   return %*{"id": job.id}
 
 proc startUploadJob(spec: JsonNode): JsonNode =
   var job = createUploadJob(spec)
-  discard spawn perform(job)
+  spawn perform(job)
   return %*{"id": job.id}
 
-proc getJobStatus*(id: string): JsonNode =
-#  if jobResults.hasKey(id):
-#    let res = jobResults[id]
-#    if res.isReady:
-#      return %*{"id": id, "status": "done", "result": ^res}
-#    else:
-#      return %*{"id": id, "status": "working"}
-#  else:
-   return %*{"error": "no such id"}
+proc getJobResult*(id: string): JsonNode =
+  ## Check on disk for the result JSON file
+  let dir = buildsDirectory / id
+  if existsDir(dir):
+    var resultFile = dir / arduinoResultFile
+    if existsFile(resultFile):
+      var res: JsonNode
+      try:
+        res = parseJson(readFile(resultFile))
+      except:
+        return %*{"error": "Bad JSON result file " & resultFile}
+      return %*{"id": id, "status": "done", "result": res}
+    else:
+      return %*{"id": id, "status": "working"}
+  else:
+    return nil
+
+proc verifyTools() =
+  arduinoIde = $args["-a"]
+  ## Make sure we have the tools installed we need
+  if not existsFile(arduinoIde):
+    echo "Can not find arduino IDE executable: " & arduinoIde
+    quit 1
+  else:
+    echo "Found Arduino IDE: " & arduinoIde
+
+# Verify tools
+verifyTools()
 
 # Jester routes
 routes:
@@ -275,7 +320,7 @@ routes:
     except:
       stderr.writeLine "Unable to parse JSON body: " & request.body      
       resp Http400, "Unable to parse JSON body"
-    let job = startVerifyJob(spec)
+    var job = startVerifyJob(spec)
     resp($job, "application/json")
 
   post "/upload":
@@ -290,8 +335,11 @@ routes:
 
   get "/result/@id":
     ## Get result of a given job
-    let job = getJobStatus(@"id")
-    resp($job, "application/json")
+    let res = getJobResult(@"id")
+    if res.isNil:
+      resp Http404, "Job not found"
+    else:
+      resp($res, "application/json")
 
 # Clean out working directory
 cleanWorkingDirectory()
