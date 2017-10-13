@@ -47,6 +47,23 @@ Then reboot it and run:
     sudo apt-get update
     sudo apt-get upgrade
 
+# Wifi
+In order for the Raspberry to auto connect to a given wifi we need a bit of configuration. This is a bit problematic with Raspbian Stretch, but the following got it working.
+
+Add the following lines to `/etc/network/interfaces`:
+
+    allow-hotplug wlan0
+    iface wlan0 inet manual
+        wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+
+Add your Wifi settings to `/etc/wpa_supplicant/wpa_supplicant.conf`:
+
+    network={
+        ssid="MyCoolWifi"
+        psk="some-good-password"
+    }
+
+Hopefully this should then get the Raspberry to automatically connect to the Wifi upon boot.
 
 # MQTT
 Arduinobot can use any MQTT server, but an interesting use case is when the Raspberry Pi is a complete standalone solution, acting as an access point, and not connecting to any other network. In this case we run a local MQTT server on the Raspberry and for the moment we have chosen to use [Mosquitto](https://mosquitto.org/) and to get the latest we use their own repositories:
@@ -154,6 +171,29 @@ It should eventually end with:
 You can also run some tests, but they require a running MQTT server on localhost:
 
     nimble tests
+
+### Adding service
+Create `/etc/systemd/system/arduinobot.service`:
+
+    [Unit]
+    Description=Arduinobot
+    After=network.target
+
+    [Service]
+    User=pi
+    WorkingDirectory=/home/pi
+    ExecStart=/home/pi/.nimble/bin/arduinobot -a /home/pi/arduino-1.8.4/arduino
+    Restart=always
+    RestartSec=60
+        
+    [Install]
+    WantedBy=multi-user.target
+
+Then enable it:
+
+    systemctl daemon-reload
+    systemctl enable arduinobot
+    systemctl start arduinobot
 
 ## How to run
 Arduinobot is a server and only needs an MQTT server to connect to in order to function. Use `--help` to see information on available options:
