@@ -56,8 +56,9 @@ let help = """
 
 var args = docopt(help, version = arduinobotVersion)
 
-# We allow up to 10 jobs in parallell
-setMinPoolSize(10)
+# Pool size
+setMinPoolSize(50)
+setMaxPoolSize(50)
 
 # We need to load config file if it exists and run docopt again
 let config = $args["-c"]
