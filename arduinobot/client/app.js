@@ -1,12 +1,16 @@
 ;(function () {
-  /* global $ */
+  /* global $ bot */
 
   // Keeping state in a global object to make debugging easier
   if (!window.bot) { window.bot = {} }
 
+  // Constants
+  var fileName = 'sketch.ino'
+  var portNumber = 1884
+
   // MQTT
   var mqttClient = null
-  var subscribeTopic = 'decoded/#'
+  var editor = null
 
   function main () {
     $(function () {
@@ -17,9 +21,24 @@
       // Event listener for Back button.
       $('.app-back').on('click', function () { window.history.back() })
 
-      // Verify and Upload
-      $('#verify').click(function () { verify() })
-      $('#upload').click(function () { upload() })
+      // Create editor
+      editor = window.CodeMirror.fromTextArea(document.getElementById('code'), {
+        lineNumbers: true,
+        matchBrackets: true,
+        mode: 'text/x-csrc'
+      })
+      editor.setSize('100%', 500)
+
+      // Verify and Upload buttons
+      $('#verify').click(function () { verify(false) })
+      $('#upload').click(function () { verify(true) })
+      editor.setOption('extraKeys', {
+        F5: function (cm) { verify(false) },
+        F6: function (cm) { verify(true) }
+      })
+
+      // Server changed
+      $('#server').change(function () { connect() })
 
       // Call device ready directly (this app can work without Cordova).
       onDeviceReady()
@@ -49,14 +68,14 @@
 
   function connectMQTT () {
     var clientID = guid()
-    mqttClient = new window.Paho.MQTT.Client('lora.evothings.com', 1884, clientID)
+    mqttClient = new window.Paho.MQTT.Client(getServer(), portNumber, clientID)
     mqttClient.onConnectionLost = onConnectionLost
     mqttClient.onMessageArrived = onMessageArrived
     var options =
       {
-        userName: 'admin',
-        password: 'lots',
-        useSSL: true,
+        userName: 'test',
+        password: 'test',
+        useSSL: false,
         reconnect: true,
         onSuccess: onConnectSuccess,
         onFailure: onConnectFailure
@@ -64,24 +83,73 @@
     mqttClient.connect(options)
   }
 
-  function verify () {
-
+  function getSource () {
+    return editor.getValue()
   }
 
-  function upload () {
-    
+  function getServer () {
+    return $('#server').val()
+  }
+
+  function cursorWait () {
+    $('body').css('cursor', 'progress')
+  }
+
+  function cursorDefault () {
+    $('body').css('cursor', 'default')
+  }
+
+  function verify (upload) {
+    cursorWait()
+
+    // Select command
+    var command = 'verify'
+    if (upload) {
+      command = 'upload'
+    }
+
+    // Generate an id for the response we want to get
+    var responseId = guid()
+
+    // Subscribe in advance for that response
+    subscribe('response/' + command + '/' + responseId)
+
+    // Construct a job to run
+    var job = {
+      'sketch': fileName,
+      'src': window.btoa(getSource())
+    }
+
+    // Submit job
+    publish(command + '/' + responseId, job)
+  }
+
+  function handleResponse (topic, payload) {
+    var jobId = payload.id
+    subscribe('result/' + jobId)
+    unsubscribe(topic)
+  }
+
+  function handleResult (topic, payload) {
+    var type = payload.type
+    unsubscribe(topic)
+    if (type === 'success') {
+      console.log('Exit code: ' + payload.exitCode)
+      console.log('Output: ' + payload.output)
+    } else {
+      console.log('Fail:' + payload)
+    }
+    cursorDefault()
   }
 
   function onMessageArrived (message) {
     var payload = JSON.parse(message.payloadString)
     console.log('Topic: ' + message.topic + ' payload: ' + message.payloadString)
-    handleMessage(payload)
+    handleMessage(message.topic, payload)
   }
 
   function onConnectSuccess (context) {
-    subscribe()
     showMessage('Connected')
-    // For debugging: publish({ message: 'Hello' })
   }
 
   function onConnectFailure (error) {
@@ -94,20 +162,20 @@
     showMessage('Connection was lost')
   }
 
-  function publish (json) {
-    var message = new window.Paho.MQTT.Message(JSON.stringify(json.message))
-    message.destinationName = json.topic
+  function publish (topic, payload) {
+    var message = new window.Paho.MQTT.Message(JSON.stringify(payload))
+    message.destinationName = topic
     mqttClient.send(message)
   }
 
-  function subscribe () {
-    mqttClient.subscribe(subscribeTopic)
-    console.log('Subscribed: ' + subscribeTopic)
+  function subscribe (topic) {
+    mqttClient.subscribe(topic)
+    console.log('Subscribed: ' + topic)
   }
 
-  function unsubscribe () {
-    mqttClient.unsubscribe(subscribeTopic)
-    console.log('Unsubscribed: ' + subscribeTopic)
+  function unsubscribe (topic) {
+    mqttClient.unsubscribe(topic)
+    console.log('Unsubscribed: ' + topic)
   }
 
   function disconnectMQTT () {
@@ -119,11 +187,14 @@
     //document.querySelector('.mdl-snackbar').MaterialSnackbar.showSnackbar({message: message})
   }
 
-  function handleMessage (payload) {
+  function handleMessage (topic, payload) {
     try {
-      // Set current timestamp.
-      // currentTimeStamp = new Date(payload.datetime).getTime()
-
+      if (topic.startsWith('response/')) {
+        return handleResponse(topic, payload)
+      } else if (topic.startsWith('result/')) {
+        return handleResult(topic, payload)
+      }
+      console.log('Unknown topic: ' + topic)
     } catch (error) {
       console.log('Error handling payload: ' + error)
     }
