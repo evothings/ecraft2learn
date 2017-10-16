@@ -72,23 +72,22 @@
 
     <div class="container theme-showcase"  role="main">
 
-      <form>
-        <div class="row">
-          <div class="form-group col-sm-6">
-            <label for="server">MQTT server</label>
-            <input type="text" class="form-control" id="server" aria-describedby="serverHelp" placeholder="Enter hostname" value="raspberrypi.local">
-            <small id="serverHelp" class="form-text text-muted">This is typically the Raspberry pi, <strong>raspberrypi.local</strong></small>
-          </div>
-          <div class="form-group col-sm-6">
-            <label for="verify">Actions</label></br>
-            <button type="button" id="verify" class="btn btn-default" data-toggle="tooltip" data-placement="bottom" title="Submit the source code for compilation">Verify F5</button>
-            <button type="button" id="upload" class="btn btn-primary" data-toggle="tooltip" data-placement="bottom" title="Both compiles and flashes an arduino board">Upload F6</button>          
-          </div>
+      <div class="row">
+        <div class="form-group col-sm-6">
+          <label for="server">MQTT server</label>
+          <input type="text" class="form-control" id="server" aria-describedby="serverHelp" placeholder="Enter hostname" value="raspberrypi.local">
+          <small id="serverHelp" class="form-text text-muted">This is typically the Raspberry pi, <strong>raspberrypi.local</strong></small>
         </div>
+        <div class="form-group col-sm-6">
+          <label for="verify">Actions</label></br>
+          <button type="button" id="verify" class="btn btn-default" data-toggle="tooltip" data-placement="bottom" title="Submit the source code for compilation">Verify F5</button>
+          <button type="button" id="upload" class="btn btn-primary" data-toggle="tooltip" data-placement="bottom" title="Both compiles and flashes an arduino board">Upload F6</button>          
+        </div>
+      </div>
 
-        <div class="form-group" style="position: relative;">
-          <label for="code">Sketch source code</label>
-          <textarea id="code" name="code" aria-describedby="codeHelp" >
+      <div class="form-group" style="position: relative;">
+        <label for="code">Sketch source code</label>
+        <textarea id="code" name="code" aria-describedby="codeHelp" >
 /*
  * Author: Göran Krampe
  *
@@ -114,13 +113,9 @@ void led_off()
 {
   digitalWrite(13, 0);
 }
-          </textarea>
-          <small id="codeHelp" class="form-text text-muted">This is your ino sketch source code</small>
-        </div>
-        
-      </form>
-      <script>
-      </script>
+        </textarea>
+        <small id="codeHelp" class="form-text text-muted">This is your ino sketch source code</small>
+      </div>
     </div> <!-- /container -->
 
 
