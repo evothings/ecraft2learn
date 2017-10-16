@@ -20,11 +20,11 @@
 #   https://github.com/arduino/Arduino/blob/master/build/shared/manpage.adoc
 
 import jester, asyncdispatch, mqtt, MQTTClient, asyncnet, htmlgen, json, logging, os, strutils,
-  sequtils, nuuid, tables, osproc, base64, threadpool, docopt
+  sequtils, nuuid, tables, osproc, base64, threadpool, docopt, streams, pegs
 
 # Jester settings
 settings:
-  port = Port(80)
+  port = Port(8080)
 
 # Various defaults
 const
@@ -186,6 +186,37 @@ proc startMessenger(serverUrl, clientID, username, password: string) =
   connectMQTT(serverUrl, clientID, username, password)
   configureMessenger(arduinoIde)
 
+
+# Custom proc that reads stdout, stderr separately
+proc execCmdExSep*(command: string, options: set[ProcessOption] = {poUsePath}):
+  tuple[stdout, stderr: TaintedString, exitCode: int] {.tags:
+  [ExecIOEffect, ReadIOEffect, RootEffect], gcsafe.} =
+  ## A convenience proc that runs the `command`, grabs stdout and stderr separately
+  ## and returns exit code, stderr, stdout.
+  ##
+  ## .. code-block:: Nim
+  ##
+  ##  let (out, err, errC) = execCmdExSep("nim c -r mytestfile.nim")
+  var p = startProcess(command, options=options + {poEvalCommand})
+  var outp = outputStream(p)
+  var errp = errorStream(p)
+  result = (TaintedString"", TaintedString"", -1)
+  var line = newStringOfCap(120).TaintedString
+  while true:
+    var nothing = true
+    if outp.readLine(line):
+      result[0].string.add(line.string)
+      result[0].string.add("\n")
+      nothing = false
+    if errp.readLine(line):
+      result[1].string.add(line.string)
+      result[1].string.add("\n")
+      nothing = false
+    if nothing:
+      result[2] = peekExitCode(p)
+      if result[2] != -1: break
+  close(p)
+
 # A single object variant works fine since it's not complex
 type
   JobKind = enum jkVerify, jkUpload
@@ -224,27 +255,27 @@ proc unpack(job: Job) =
   createDir(job.path / name)
   writeFile(job.sketchPath, decode(job.src))
 
-proc verify(job: Job):  tuple[output: TaintedString, exitCode: int] =
+proc verify(job: Job):  tuple[stdout, stderr: TaintedString, exitCode: int] =
   ## Run --verify command via Arduino IDE
   echo "Starting verify job " & job.id
   let cmd = job.arduinoIde & " --verbose --verify --board " & job.board &
     " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
-  result = execCmdEx(cmd)
+  result = execCmdExSep(cmd)
   echo "Job done " & job.id
 
-proc upload(job: Job):  tuple[output: TaintedString, exitCode: int] =
+proc upload(job: Job):  tuple[stdout, stderr: TaintedString, exitCode: int] =
   ## Run --upload command via Arduino IDE
   echo "Starting upload job " & job.id
   # --verbose-build / --verbose-upload / --verbose
   let cmd = job.arduinoIde & " --verbose --upload --board " & job.board & " --port " & job.port &
     " --preserve-temp-files --pref build.path=" & job.path & " " & job.sketchPath
   echo "Command " & cmd
-  result = execCmdEx(cmd)
+  result = execCmdExSep(cmd)
   echo "Job done " & job.id
   return
 
-proc run(job: Job): tuple[output: TaintedString, exitCode: int] =
+proc run(job: Job): tuple[stdout, stderr: TaintedString, exitCode: int] =
   ## Run a job by executing all tasks needed
   unpack(job)
   case job.kind
@@ -253,12 +284,26 @@ proc run(job: Job): tuple[output: TaintedString, exitCode: int] =
   of jkUpload:
     return job.upload()
 
+proc parseErrors(stderr: TaintedString, job: Job): JsonNode =
+  var (_, sketchName, _) = splitFile(job.sketch)
+  var lineMatcher = peg("^ '" & sketchName & r":' {\d+} ':' {.*} $")
+  result = %(@[])
+  var foundVerifying = false
+  for line in stderr.splitLines:
+    if foundVerifying:
+      if line =~ lineMatcher:
+        var er = %*{"line": matches[0], "message": matches[1]}
+        result.add(er)
+    if line.startsWith("Verifying..."):
+      foundVerifying = true
+
 proc perform(job: Job) =
   ## Perform a job and publish JSON result
   var res: JsonNode
   try:
-    var (output, exitCode) = job.run()
-    res = %*{"type": "success", "output": output, "exitCode": exitCode}
+    var (stdout, stderr, exitCode) = job.run()
+    var errors = parseErrors(stderr, job)
+    res = %*{"type": "success", "stdout": stdout, "stderr": stderr, "errors": errors, "exitCode": exitCode}
   except:
     res = %*{"type": "error", "message": "Failed job: " & getCurrentExceptionMsg()}
   writeFile(job.path / arduinoResultFile, $res)

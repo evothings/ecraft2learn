@@ -135,7 +135,9 @@
     unsubscribe(topic)
     if (type === 'success') {
       console.log('Exit code: ' + payload.exitCode)
-      console.log('Output: ' + payload.output)
+      console.log('Stdout: ' + payload.stdout)
+      console.log('Stderr: ' + payload.stderr)
+      console.log('Errors: ' + JSON.stringify(payload.errors))
     } else {
       console.log('Fail:' + payload)
     }
