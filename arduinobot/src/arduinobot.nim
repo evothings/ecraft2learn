@@ -2,7 +2,7 @@
 #
 #   arduinobot -u myuser -p mysecretpassword -s tcp://some-mqtt-server.com:1883
 #
-# Arduinobot listens on port 10000 for REST calls with JSON payloads
+# Arduinobot listens on port 80 for REST calls with JSON payloads
 # and on corresponding MQTT topics listed below.
 #
 # * Jester runs in the main thread, asynchronously. 
@@ -24,7 +24,7 @@ import jester, asyncdispatch, mqtt, MQTTClient, asyncnet, htmlgen, json, logging
 
 # Jester settings
 settings:
-  port = Port(10000)
+  port = Port(80)
 
 # Various defaults
 const
