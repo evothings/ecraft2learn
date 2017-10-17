@@ -32,6 +32,7 @@
       editor = window.CodeMirror.fromTextArea(document.getElementById('code'), {
         lineNumbers: true,
         matchBrackets: true,
+        gutters: ['error-markers', 'CodeMirror-linenumbers'],
         mode: 'text/x-csrc'
       })
       editor.setSize('100%', 500)
@@ -73,7 +74,7 @@
   function connect () {
     disconnectMQTT()
     connectMQTT()
-    //showAlert('info', '', 'Connecting to MQTT ...', true)
+    // showAlert('info', '', 'Connecting to MQTT ...', true)
   }
 
   // We need a unique client id when connecting to MQTT
@@ -178,31 +179,27 @@
     var command = payload.command
     unsubscribe(topic)
     if (type === 'success') {
-      if (command === 'verify') {
-        console.log('Exit code: ' + payload.exitCode)
-        console.log('Stdout: ' + payload.stdout)
-        console.log('Stderr: ' + payload.stderr)
-        console.log('Errors: ' + JSON.stringify(payload.errors))
-        clearAlerts()
-        if (payload.exitCode === 0) {
+      console.log('Exit code: ' + payload.exitCode)
+      console.log('Stdout: ' + payload.stdout)
+      console.log('Stderr: ' + payload.stderr)
+      console.log('Errors: ' + JSON.stringify(payload.errors))
+      clearAlerts()
+      if (payload.exitCode === 0) {
+        if (command === 'verify') {
           showAlert('success', 'Success!', 'No compilation errors')
         } else {
-          showAlert('danger', 'Failed!', 'Compilation errors detected')
+          showAlert('success', 'Success!', 'No compilation errors and upload was performed correctly')
         }
       } else {
-        console.log('Exit code: ' + payload.exitCode)
-        console.log('Stdout: ' + payload.stdout)
-        console.log('Stderr: ' + payload.stderr)
-        console.log('Errors: ' + JSON.stringify(payload.errors))
-        clearAlerts()
-        if (payload.exitCode === 0) {
-          showAlert('success', 'Success!', 'No compilation errors and upload was performed correctly')
+        if (command === 'verify') {
+          showAlert('danger', 'Failed!', 'Compilation errors detected: ' + payload.errors.length)
         } else {
-          showAlert('danger', 'Failed!', 'Compilation errors detected, upload not performed')
+          showAlert('danger', 'Failed!', 'Compilation errors detected: ' + payload.errors.length + '. Upload not performed')
         }
       }
+      updateMarkers(editor, payload.errors)
     } else {
-      console.log('Fail:' + payload)
+      showAlert('danger', 'Failed!', 'Job failed: ' + payload.message)
     }
     cursorDefault()
     disableButtons(false)
@@ -294,6 +291,173 @@
     } catch (error) {
       console.log('Error handling payload: ' + error)
     }
+  }
+
+  /*
+   * Error marking code, the following code is copied and adapted from the lint.js
+   * addon in CodeMirror, licensed MIT.
+   */
+  var GUTTER_ID = 'error-markers'
+  var textMarkers = []
+
+  function showTooltip (e, content) {
+    var tt = document.createElement('div')
+    tt.className = 'error-tooltip'
+    tt.appendChild(content.cloneNode(true))
+    document.body.appendChild(tt)
+    function position (e) {
+      if (!tt.parentNode) {
+        return window.CodeMirror.off(document, 'mousemove', position)
+      }
+      tt.style.top = Math.max(0, e.clientY - tt.offsetHeight - 5) + 'px'
+      tt.style.left = (e.clientX + 5) + 'px'
+    }
+    window.CodeMirror.on(document, 'mousemove', position)
+    position(e)
+    if (tt.style.opacity != null) {
+      tt.style.opacity = 1
+    }
+    return tt
+  }
+
+  function rm (elt) {
+    if (elt.parentNode) elt.parentNode.removeChild(elt)
+  }
+
+  function hideTooltip (tt) {
+    if (!tt.parentNode) return
+    if (tt.style.opacity == null) rm(tt)
+    tt.style.opacity = 0
+    setTimeout(function () { rm(tt) }, 600)
+  }
+
+  function showTooltipFor (e, content, node) {
+    var tooltip = showTooltip(e, content)
+    function hide () {
+      window.CodeMirror.off(node, 'mouseout', hide)
+      if (tooltip) { hideTooltip(tooltip); tooltip = null }
+    }
+    var poll = setInterval(function () {
+      if (tooltip) {
+        for (var n = node; ; n = n.parentNode) {
+          if (n && n.nodeType === 11) {
+            n = n.host
+          }
+          if (n === document.body) return
+          if (!n) {
+            hide()
+            break
+          }
+        }
+      }
+      if (!tooltip) return clearInterval(poll)
+    }, 400)
+    window.CodeMirror.on(node, 'mouseout', hide)
+  }
+
+  function clearMarks (cm) {
+    cm.clearGutter(GUTTER_ID)
+    for (var i = 0; i < textMarkers.length; ++i) {
+      textMarkers[i].clear()
+    }
+    textMarkers.length = 0
+  }
+
+  function makeMarker (labels, severity, multiple) {
+    var marker = document.createElement('div')
+    var inner = marker
+    marker.className = 'error-marker-' + severity
+    if (multiple) {
+      inner = marker.appendChild(document.createElement('div'))
+      inner.className = 'error-marker-multiple'
+    }
+    window.CodeMirror.on(inner, 'mouseover', function (e) {
+      showTooltipFor(e, labels, inner)
+    })
+    return marker
+  }
+
+  function groupByLine (errors) {
+    var lines = []
+    var previousLine = null
+    var line = null
+    for (var i = 0; i < errors.length; ++i) {
+      var ann = errors[i]
+      if (previousLine === ann.line) {
+        line.push(ann)
+      } else {
+        line = []
+        line.push(ann)
+        lines.push(line)
+      }
+      previousLine = ann.line
+    }
+    return lines
+  }
+
+  function annotationTooltip (ann) {
+    var tip = document.createElement('div')
+    tip.className = 'error-message-error'
+    if (typeof ann.messageHTML !== 'undefined') {
+      tip.innerHTML = ann.messageHTML
+    } else {
+      tip.appendChild(document.createTextNode(ann.message))
+    }
+    return tip
+  }
+
+  function updateMarkers (cm, errors) {
+    // Enable mouseover?
+    window.CodeMirror.on(cm.getWrapperElement(), 'mouseover', onMouseOver)
+
+    clearMarks(cm)
+    var annotations = groupByLine(errors)
+
+    for (var line = 0; line < annotations.length; ++line) {
+      var anns = annotations[line]
+      if (!anns) continue
+
+      var tipLabel = document.createDocumentFragment()
+      var lineNo = null
+      // Loop over all on this line number
+      for (var i = 0; i < anns.length; ++i) {
+        var ann = anns[i]
+        lineNo = parseInt(ann.line) - 1
+        tipLabel.appendChild(annotationTooltip(ann))
+        textMarkers.push(cm.markText({line: lineNo, ch: 1}, {line: lineNo, ch: 3}, {
+          className: 'error-mark-error',
+          __annotation: ann
+        }))
+      }
+
+      cm.setGutterMarker(lineNo, GUTTER_ID, makeMarker(tipLabel, 'error', anns.length > 1))
+    }
+  }
+
+  function popupTooltips (annotations, e) {
+    var target = e.target || e.srcElement
+    var tooltip = document.createDocumentFragment()
+    for (var i = 0; i < annotations.length; i++) {
+      var ann = annotations[i]
+      tooltip.appendChild(annotationTooltip(ann))
+    }
+    showTooltipFor(e, tooltip, target)
+  }
+
+  function onMouseOver (e) {
+    var target = e.target || e.srcElement
+    if (!/\berror-mark-/.test(target.className)) return
+    var box = target.getBoundingClientRect()
+    var x = (box.left + box.right) / 2
+    var y = (box.top + box.bottom) / 2
+    var spans = editor.findMarksAt(editor.coordsChar({left: x, top: y}, 'client'))
+
+    var annotations = []
+    for (var i = 0; i < spans.length; ++i) {
+      var ann = spans[i].__annotation
+      if (ann) annotations.push(ann)
+    }
+    if (annotations.length) popupTooltips(annotations, e)
   }
 
   // Call main function to initialise app.

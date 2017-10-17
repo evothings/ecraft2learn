@@ -303,7 +303,13 @@ proc perform(job: Job) =
   try:
     var (stdout, stderr, exitCode) = job.run()
     var errors = parseErrors(stderr, job)
-    res = %*{"type": "success", "stdout": stdout, "stderr": stderr, "errors": errors, "exitCode": exitCode}
+    var cmd: string
+    case job.kind
+    of jkVerify:
+      cmd = "verify"
+    of jkUpload:
+      cmd = "upload"
+    res = %*{"type": "success", "command": cmd, "stdout": stdout, "stderr": stderr, "errors": errors, "exitCode": exitCode}
   except:
     res = %*{"type": "error", "message": "Failed job: " & getCurrentExceptionMsg()}
   writeFile(job.path / arduinoResultFile, $res)

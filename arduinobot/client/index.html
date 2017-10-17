@@ -32,6 +32,7 @@
 
     <!-- Codemirror stuff -->
     <link rel="stylesheet" href="lib/codemirror/codemirror.css">
+    <link rel="stylesheet" href="errors.css">
     <script src="lib/codemirror/codemirror.js"></script>
     <script src="clike.js"></script>
     <style>.CodeMirror {border: 2px inset #dee;}</style>
@@ -56,7 +57,7 @@
       <div class="row">
         <div class="form-group col-sm-6">
           <label for="server">MQTT server</label>
-          <input type="text" class="form-control" id="server" aria-describedby="serverHelp" placeholder="Enter hostname" value="raspberrypi.local">
+          <input type="text" class="form-control" id="server" aria-describedby="serverHelp" placeholder="Enter hostname" value="localhost">
           <small id="serverHelp" class="form-text text-muted">This is typically the Raspberry pi, <strong>raspberrypi.local</strong></small>
         </div>
         <div class="form-group col-sm-6">
@@ -73,7 +74,6 @@
         <textarea id="code" name="code" aria-describedby="codeHelp" >
 /*
  * Author: Göran Krampe
- *
  */
 
 void setup() {
@@ -87,13 +87,11 @@ void loop() {
   delay(1000);
 }
 
-void led_on()
-{
+void led_on() {
   digitalWrite(13, 1);
 }
 
-void led_off()
-{
+void led_off() {
   digitalWrite(13, 0);
 }
         </textarea>
