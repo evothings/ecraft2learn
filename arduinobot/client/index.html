@@ -122,13 +122,11 @@ void led_off()
     <script src="lib/mqttws/mqttws.js"></script>
     <script src="app.js"></script>
 
-    <div id="alert-template" class="alert alert-warning alert-dismissible fade show" role="alert">
+    <div class="alert-template alert alert-dismissible fade in hide" role="alert">
       <button type="button" class="close" data-dismiss="alert" aria-label="Close">
         <span aria-hidden="true">&times;</span>
       </button>
-      <span id="alert-message">
-        <strong>Holy guacamole!</strong> You should check in on some of those fields below.
-      </span>
+      <span id="alert-message"></span>
     </div>
   </body>
 </html>

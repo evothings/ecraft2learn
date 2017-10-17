@@ -1,16 +1,23 @@
 ;(function () {
-  /* global $ bot */
-
-  // Keeping state in a global object to make debugging easier
-  if (!window.bot) { window.bot = {} }
+  /* global $ */
 
   // Constants
-  var fileName = 'sketch.ino'
   var portNumber = 1884
 
   // MQTT
   var mqttClient = null
   var editor = null
+  var sketch = 'blinky'
+
+  function getParameterByName (name, url) {
+    if (!url) url = window.location.href
+    name = name.replace(/[\[\]]/g, '\\$&')
+    var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)')
+    var results = regex.exec(url)
+    if (!results) return null
+    if (!results[2]) return ''
+    return decodeURIComponent(results[2].replace(/\+/g, ' '))
+  }
 
   function main () {
     $(function () {
@@ -29,9 +36,18 @@
       })
       editor.setSize('100%', 500)
 
+      // Disable buttons from start
+      disableButtons(true)
+
+      // Sketch name to fetch
+      sketch = getParameterByName('sketch')
+      if (sketch === null) {
+        sketch = 'blinky'
+      }
+
       // Verify and Upload buttons
-      $('#verify').click(function () { verify(false) })
-      $('#upload').click(function () { verify(true) })
+      $('#verify').mouseup(function () { this.blur(); verify(false) })
+      $('#upload').mouseup(function () { this.blur(); verify(true) })
       editor.setOption('extraKeys', {
         F5: function (cm) { verify(false) },
         F6: function (cm) { verify(true) }
@@ -45,15 +61,19 @@
     })
   }
 
+  function disableButtons (disable) {
+    $('#verify').prop('disabled', disable)
+    $('#upload').prop('disabled', disable)
+  }
+
   function onDeviceReady () {
-    // Connect to MQTT
     connect()
   }
 
   function connect () {
     disconnectMQTT()
     connectMQTT()
-    showMessage('Connecting')
+    //showAlert('info', '', 'Connecting to MQTT ...', true)
   }
 
   // We need a unique client id when connecting to MQTT
@@ -87,6 +107,10 @@
     return editor.getValue()
   }
 
+  function setSource (src) {
+    return editor.setValue(src)
+  }
+
   function getServer () {
     return $('#server').val()
   }
@@ -101,6 +125,13 @@
 
   function verify (upload) {
     cursorWait()
+    disableButtons(true)
+    clearAlerts()
+    if (upload) {
+      showAlert('info', 'Compiling and uploading ...', '', false)
+    } else {
+      showAlert('info', 'Compiling ...', '', false)
+    }
 
     // Select command
     var command = 'verify'
@@ -116,9 +147,12 @@
 
     // Construct a job to run
     var job = {
-      'sketch': fileName,
+      'sketch': sketch + '.ino',
       'src': window.btoa(getSource())
     }
+
+    // Save sketch
+    publish('sketch/' + sketch, job, true)
 
     // Submit job
     publish(command + '/' + responseId, job)
@@ -130,19 +164,48 @@
     unsubscribe(topic)
   }
 
+  function handleSketch (topic, payload) {
+    if (payload.sketch === (sketch + '.ino')) {
+      var newSource = window.atob(payload.src)
+      if (getSource() !== newSource) {
+        setSource(newSource)
+      }
+    }
+  }
+
   function handleResult (topic, payload) {
     var type = payload.type
+    var command = payload.command
     unsubscribe(topic)
     if (type === 'success') {
-      console.log('Exit code: ' + payload.exitCode)
-      console.log('Stdout: ' + payload.stdout)
-      console.log('Stderr: ' + payload.stderr)
-      console.log('Errors: ' + JSON.stringify(payload.errors))
-      showMessage("Success! Cool")
+      if (command === 'verify') {
+        console.log('Exit code: ' + payload.exitCode)
+        console.log('Stdout: ' + payload.stdout)
+        console.log('Stderr: ' + payload.stderr)
+        console.log('Errors: ' + JSON.stringify(payload.errors))
+        clearAlerts()
+        if (payload.exitCode === 0) {
+          showAlert('success', 'Success!', 'No compilation errors')
+        } else {
+          showAlert('danger', 'Failed!', 'Compilation errors detected')
+        }
+      } else {
+        console.log('Exit code: ' + payload.exitCode)
+        console.log('Stdout: ' + payload.stdout)
+        console.log('Stderr: ' + payload.stderr)
+        console.log('Errors: ' + JSON.stringify(payload.errors))
+        clearAlerts()
+        if (payload.exitCode === 0) {
+          showAlert('success', 'Success!', 'No compilation errors and upload was performed correctly')
+        } else {
+          showAlert('danger', 'Failed!', 'Compilation errors detected, upload not performed')
+        }
+      }
     } else {
       console.log('Fail:' + payload)
     }
     cursorDefault()
+    disableButtons(false)
   }
 
   function onMessageArrived (message) {
@@ -152,28 +215,36 @@
   }
 
   function onConnectSuccess (context) {
-    showMessage('Connected')
+    disableButtons(false)
+    showAlert('info', '', 'Connected', true)
+    subscribeToSketch()
   }
 
   function onConnectFailure (error) {
     console.log('Failed to connect: ' + JSON.stringify(error))
-    showMessage('Connect failed')
+    showAlert('danger', 'Connect failed!', 'Reconnecting ...', true)
   }
 
   function onConnectionLost (responseObject) {
     console.log('Connection lost: ' + responseObject.errorMessage)
-    showMessage('Connection was lost')
+    disableButtons(true)
+    showAlert('warning', 'Connection was lost!', 'Reconnecting ...', true)
   }
 
-  function publish (topic, payload) {
+  function publish (topic, payload, retained = false) {
     var message = new window.Paho.MQTT.Message(JSON.stringify(payload))
     message.destinationName = topic
+    message.retained = retained
     mqttClient.send(message)
   }
 
   function subscribe (topic) {
     mqttClient.subscribe(topic)
     console.log('Subscribed: ' + topic)
+  }
+
+  function subscribeToSketch () {
+    subscribe('sketch/' + sketch)
   }
 
   function unsubscribe (topic) {
@@ -186,16 +257,28 @@
     mqttClient = null
   }
 
-  function showMessage (message) {
-    // Create switch.
-    var template = $('#alert-template')
+  function clearAlerts () {
+    // Remove all visible alerts
+    $('#alerts').empty()
+  }
+
+  function showAlert (type, title, message, fading = false) {
+    // Clone template HTML. Type can be: 'success', 'info', 'warning', 'danger'
+    var template = $('.alert-template')
     var el = template.clone()
-    
-    // Set attributes.
-    el.find('#alert-message').text(message)
+    el.removeClass('alert-template')
+    el.removeClass('hide')
+    el.addClass('alert-' + type)
+    // Set message, append to DOM, hook up as alert and show
+    el.find('#alert-message').append('<strong>' + title + '</strong> ' + message)
     $('#alerts').append(el)
     el.alert()
     el.show()
+    if (fading) {
+      setTimeout(function () {
+        el.alert('close')
+      }, 2000)
+    }
   }
 
   function handleMessage (topic, payload) {
@@ -204,6 +287,8 @@
         return handleResponse(topic, payload)
       } else if (topic.startsWith('result/')) {
         return handleResult(topic, payload)
+      } else if (topic.startsWith('sketch/')) {
+        return handleSketch(topic, payload)
       }
       console.log('Unknown topic: ' + topic)
     } catch (error) {
