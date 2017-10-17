@@ -138,6 +138,7 @@
       console.log('Stdout: ' + payload.stdout)
       console.log('Stderr: ' + payload.stderr)
       console.log('Errors: ' + JSON.stringify(payload.errors))
+      showMessage("Success! Cool")
     } else {
       console.log('Fail:' + payload)
     }
@@ -186,7 +187,15 @@
   }
 
   function showMessage (message) {
-    //document.querySelector('.mdl-snackbar').MaterialSnackbar.showSnackbar({message: message})
+    // Create switch.
+    var template = $('#alert-template')
+    var el = template.clone()
+    
+    // Set attributes.
+    el.find('#alert-message').text(message)
+    $('#alerts').append(el)
+    el.alert()
+    el.show()
   }
 
   function handleMessage (topic, payload) {
