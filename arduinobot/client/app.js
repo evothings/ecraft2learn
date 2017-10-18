@@ -243,10 +243,10 @@
     showAlert('warning', 'Connection was lost!', 'Reconnecting ...', true)
   }
 
-  function publish (topic, payload, retained = false) {
+  function publish (topic, payload, retained) {
     var message = new window.Paho.MQTT.Message(JSON.stringify(payload))
     message.destinationName = topic
-    message.retained = retained
+    message.retained = !!retained
     mqttClient.send(message)
   }
 
@@ -276,7 +276,7 @@
     $('#alerts').empty()
   }
 
-  function showAlert (type, title, message, fading = false) {
+  function showAlert (type, title, message, fading) {
     // Clone template HTML. Type can be: 'success', 'info', 'warning', 'danger'
     var template = $('.alert-template')
     var el = template.clone()
