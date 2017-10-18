@@ -2,12 +2,13 @@
   /* global $ */
 
   // Constants
-  var portNumber = 1884
+  var defaultPortNumber = 1884
 
   // MQTT
   var mqttClient = null
   var editor = null
   var sketch = 'blinky'
+  var server = 'raspberrypi.local:1884'
 
   function getParameterByName (name, url) {
     if (!url) url = window.location.href
@@ -45,6 +46,11 @@
       if (sketch === null) {
         sketch = 'blinky'
       }
+      server = getParameterByName('server')
+      if (server === null) {
+        server = 'raspberrypi.local:1884'
+      }
+      setServer(server)
 
       // Verify and Upload buttons
       $('#verify').mouseup(function () { this.blur(); verify(false) })
@@ -89,7 +95,12 @@
 
   function connectMQTT () {
     var clientID = guid()
-    mqttClient = new window.Paho.MQTT.Client(getServer(), portNumber, clientID)
+    var portNumber = defaultPortNumber
+    var serverAndPort = getServer().split(':')
+    if (serverAndPort.length === 2) {
+      portNumber = parseInt(serverAndPort[1])
+    }
+    mqttClient = new window.Paho.MQTT.Client(serverAndPort[0], portNumber, clientID)
     mqttClient.onConnectionLost = onConnectionLost
     mqttClient.onMessageArrived = onMessageArrived
     var options =
@@ -114,6 +125,10 @@
 
   function getServer () {
     return $('#server').val()
+  }
+
+  function setServer (val) {
+    return $('#server').val(val)
   }
 
   function cursorWait () {
@@ -250,7 +265,9 @@
   }
 
   function disconnectMQTT () {
-    if (mqttClient) mqttClient.disconnect()
+    if (mqttClient && mqttClient.isConnected()) {
+      mqttClient.disconnect()
+    }
     mqttClient = null
   }
 
