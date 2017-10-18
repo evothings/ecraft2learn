@@ -24,7 +24,7 @@
     $(function () {
       // When document has loaded we attach FastClick to
       // eliminate the 300 ms delay on click events.
-      window.FastClick.attach(document.body)
+      //window.FastClick.attach(document.body)
 
       // Event listener for Back button.
       $('.app-back').on('click', function () { window.history.back() })
