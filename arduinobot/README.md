@@ -81,6 +81,18 @@ Then update apt and install mosquitto - select "n" when it first explains the pr
     sudo apt-get update
     sudo aptitude install mosquitto
 
+Edit the configuration `/etc/mosquitto/mosquitto.conf` and add websockets support on port 1884 by makin sure it ends like this:
+
+    include_dir /etc/mosquitto/conf.d
+
+    listener 1883
+    listener 1884
+    protocol websockets
+
+Restart service:
+
+    sudo service mosquitto restart
+
 Then run this to see that mosquitto is listening on port 1883:
 
     netstat -plnt | grep 1883
@@ -194,6 +206,14 @@ Then enable it:
     systemctl daemon-reload
     systemctl enable arduinobot
     systemctl start arduinobot
+
+### Adding demo client
+Arduinobot serves HTTP on port 8080 and offers a REST API there for launching and checking results of jobs. But it can also serve the demo HTML5 web client. Arduinobot serves any existing directory called `public` from its working directory. If you followed instructions above that would be in `/home/pi`. Let's create a soft link into the git clone:
+
+    cd ~
+    ln -s ecraft2learn/arduinobot/client public
+
+Then you can try pointing your browser to http://raspberrypi.local:8080/index.html
 
 ## How to run
 Arduinobot is a server and only needs an MQTT server to connect to in order to function. Use `--help` to see information on available options:
