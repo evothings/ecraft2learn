@@ -215,9 +215,14 @@ sudo journaltctl -f -u arduinobot
 ```
 
 ### Enabling reporting via POST
-We have also added an optional side channel so that Arduinobot can POST the job information and accompanying errors to an external system. This is enabled by using the option `-r http://someserver.com/wherever`. Whenever Arduinobot performs a verify or upload job, it will also perform a POST to that URL.
+We have also added an optional side channel so that Arduinobot can POST the job information and accompanying errors to an external system. This is enabled by using the option `-r http://someserver.com/wherever`. If you run Arduinobot as a systemd service, just add the option to the ExecStart line like this:
+```
+ExecStart=/home/pi/.nimble/bin/arduinobot -a /home/pi/arduino-1.8.4/arduino -r http://myserver/api
+``` 
 
-This example shows the structure of the JSON, here we have an error:
+Whenever Arduinobot performs a verify or upload job, it will also perform a POST to that URL. Note that at this point Arduinobot does not support HTTPS for this.
+
+This example shows the structure of the JSON posted, here we have an error:
 ```
 {
 	"sessionId": "f6cdec83-4e42-4695-896b-ea486f2d8670",
