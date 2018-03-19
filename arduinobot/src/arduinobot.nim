@@ -342,7 +342,7 @@ proc perform(job: Job) =
   writeFile(job.path / arduinoResultFile, $res)
   publishMQTT("result/" & job.id, $res)
   # We only report the job if reportUrl is set
-  if not reportURL.isNil:
+  if not job.reportURL.isNil:
     reportResult(job, res)
 
 
