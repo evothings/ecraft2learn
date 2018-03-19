@@ -20,7 +20,7 @@
 #   https://github.com/arduino/Arduino/blob/master/build/shared/manpage.adoc
 
 import jester, asyncdispatch, mqtt, MQTTClient, asyncnet, htmlgen, json, logging, os, strutils,
-  sequtils, nuuid, tables, osproc, base64, threadpool, docopt, streams, pegs
+  sequtils, nuuid, tables, osproc, base64, threadpool, docopt, streams, pegs, httpclient
 
 # Jester settings
 settings:
@@ -40,7 +40,7 @@ let help = """
   arduinobot
   
   Usage:
-    arduinobot [-c CONFIGFILE] [-a PATH] [-u USERNAME] [-p PASSWORD] [-s MQTTURL]
+    arduinobot [-c CONFIGFILE] [-a PATH] [-u USERNAME] [-p PASSWORD] [-s MQTTURL] [-r REPORTURL]
     arduinobot (-h | --help)
     arduinobot (-v | --version)
 
@@ -48,6 +48,7 @@ let help = """
     -u USERNAME       Set MQTT username [default: test].
     -p PASSWORD       Set MQTT password [default: test].
     -s MQTTURL        Set URL for the MQTT server [default: tcp://localhost:1883]
+    -r REPORTURL      Set optional URL for reporting results to external system
     -a PATH           Set full path to Arduino IDE executable [default: ~/arduino-1.8.4/arduino]
     -c CONFIGFILE     Load options from given filename if it exists [default: arduinobot.conf]
     -h --help         Show this screen.
@@ -73,8 +74,12 @@ let username = $args["-u"]
 let password = $args["-p"]
 let serverUrl = $args["-s"]
 
+# Report URL
+let rUrl = $args["-r"]
+
 # Local thread config variable
 var arduinoIde {.threadvar.}: string
+var reportUrl {.threadvar.}: string
 
 type
   MessageKind = enum connect, configure, publish, stop
@@ -83,7 +88,7 @@ type
     of connect:
       serverUrl, clientID, username, password: string
     of configure:
-      arduinoIde: string
+      arduinoIde, reportUrl: string
     of publish:
       topic, payload: string
     of stop:
@@ -99,8 +104,8 @@ proc publishMQTT*(topic, payload: string) =
 proc connectMQTT*(s, c, u, p: string) =
   channel.send(Message(kind: connect, serverUrl: s, clientID: c, username: u, password: p))
 
-proc configureMessenger*(arduinoIde: string) =
-  channel.send(Message(kind: configure, arduinoIde: arduinoIde))
+proc configureMessenger*(arduinoIde, reportUrl: string) =
+  channel.send(Message(kind: configure, arduinoIde: arduinoIde, reportUrl: rUrl))
     
 proc stopMessenger() {.noconv.} =
   channel.send(Message(kind: stop))
@@ -171,6 +176,7 @@ proc messengerLoop() {.thread.} =
         client = connectToServer(msg.serverUrl, msg.clientID, msg.username, msg.password)
       of configure:
         arduinoIde = msg.arduinoIde
+        reportUrl = msg.reportUrl
       of publish:
         #echo "Publishing " & msg.topic & " " & msg.payload
         discard client.publish(msg.topic, msg.payload, QOS0, false)
@@ -184,7 +190,7 @@ proc startMessenger(serverUrl, clientID, username, password: string) =
   messengerThread.createThread(messengerLoop)
   addQuitProc(stopMessenger)
   connectMQTT(serverUrl, clientID, username, password)
-  configureMessenger(arduinoIde)
+  configureMessenger(arduinoIde, reportUrl)
 
 
 # Custom proc that reads stdout, stderr separately
@@ -231,16 +237,17 @@ type
       sketch: string     # name of sketch file only, like: foo.ino
       src: string        # base64 source of sketch, for multiple files, what do we do?
       arduinoIde: string # Full path to Arduino IDE executable
+      reportUrl: string  # Optional report URL to perform POST against
 
 proc createVerifyJob(spec: JsonNode): Job =
   ## Create a new job with a UUID and put it into the table
   Job(kind: jkVerify, board: arduinoBoard, port: arduinoPort, sketch: spec["sketch"].getStr,
-    src: spec["src"].getStr, id: generateUUID(), arduinoIde: arduinoIde)  
+    src: spec["src"].getStr, id: generateUUID(), arduinoIde: arduinoIde, reportUrl: reportUrl)  
 
 proc createUploadJob(spec: JsonNode): Job =
   ## Create a new job with a UUID and put it into the table
   Job(kind: jkUpload, board: arduinoBoard, port: arduinoPort, sketch: spec["sketch"].getStr,
-    src: spec["src"].getStr, id: generateUUID(), arduinoIde: arduinoIde)
+    src: spec["src"].getStr, id: generateUUID(), arduinoIde: arduinoIde, reportUrl: reportUrl)
 
 proc cleanWorkingDirectory() =
   echo "Cleaning out builds directory: " & buildsDirectory
@@ -297,6 +304,26 @@ proc parseErrors(stderr: TaintedString, job: Job): JsonNode =
     if line.startsWith("Verifying..."):
       foundVerifying = true
 
+proc reportResult(job: Job, res: JsonNode) =
+  ## Report job and result using a POST to the reportUrl endpoint
+  let client = newHttpClient()
+  client.headers = newHttpHeaders({ "Content-Type": "application/json" })
+  let body = %*{
+    "data": {
+      "job": {
+        "id": job.id,
+        "board": job.board,
+        "port": job.port,
+        "sketch": job.sketch,
+        "src": job.src
+      },
+      "result": res
+    }
+  }
+  let response = client.request(reportUrl, httpMethod = HttpPost, body = $body)
+  echo "Job reported: " & $body
+  echo "Response: " & response.status
+
 proc perform(job: Job) =
   ## Perform a job and publish JSON result
   var res: JsonNode
@@ -314,6 +341,10 @@ proc perform(job: Job) =
     res = %*{"type": "error", "message": "Failed job: " & getCurrentExceptionMsg()}
   writeFile(job.path / arduinoResultFile, $res)
   publishMQTT("result/" & job.id, $res)
+  # We only report the job if reportUrl is set
+  if not reportURL.isNil:
+    reportResult(job, res)
+
 
 proc startVerifyJob(spec: JsonNode): JsonNode =
   var job = createVerifyJob(spec)
