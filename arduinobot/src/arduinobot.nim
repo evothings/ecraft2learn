@@ -320,7 +320,7 @@ proc reportResult(job: Job, res: JsonNode) =
       "result": res
     }
   }
-  let response = client.request(reportUrl, httpMethod = HttpPost, body = $body)
+  let response = client.request(job.reportUrl, httpMethod = HttpPost, body = $body)
   echo "Job reported: " & $body
   echo "Response: " & response.status
 
