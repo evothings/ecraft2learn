@@ -207,6 +207,13 @@ Then enable it:
     systemctl enable arduinobot
     systemctl start arduinobot
 
+### Following log
+Systemd uses `journalctl` command to access logs, this command will follow the log for arduinobot:
+
+```
+sudo journaltctl -f -u arduinobot
+```
+
 ### Adding demo client
 Arduinobot serves HTTP on port 8080 and offers a REST API there for launching and checking results of jobs. But it can also serve the demo HTML5 web client. Arduinobot serves any existing directory called `public` from its working directory. If you followed instructions above that would be in `/home/pi`. Let's create a soft link into the git clone:
 
