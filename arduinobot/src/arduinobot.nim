@@ -320,9 +320,13 @@ proc reportResult(job: Job, res: JsonNode) =
       "result": res
     }
   }
-  let response = client.request(job.reportUrl, httpMethod = HttpPost, body = $body)
-  echo "Job reported: " & $body
-  echo "Response: " & response.status
+  try:
+    discard client.request(job.reportUrl, httpMethod = HttpPost, body = $body)
+    echo "Job reported: id = " & job.id & " sketch: " & job.sketch & " errrors: " & $res["errors"]
+  except:
+    let msg = getCurrentExceptionMsg()
+    echo "Got exception while reporting job: " & msg
+
 
 proc perform(job: Job) =
   ## Perform a job and publish JSON result
