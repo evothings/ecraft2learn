@@ -309,13 +309,13 @@ proc reportResult(job: Job, res: JsonNode) =
   let client = newHttpClient()
   client.headers = newHttpHeaders({ "Content-Type": "application/json" })
   let body = %*{
+    "sessionId": job.id,
     "data": {
       "job": {
-        "id": job.id,
-        "board": job.board,
-        "port": job.port,
         "sketch": job.sketch,
-        "src": job.src
+        "src": job.src,
+        "board": job.board,
+        "port": job.port
       },
       "result": res
     }
